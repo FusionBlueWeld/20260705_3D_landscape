@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Painted Grassland</title>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="scene" aria-label="painted fantasy grassland"></canvas>
+      <div class="hud" aria-label="scene controls">
+        <button id="resetView" class="icon-button" type="button" title="Reset camera" aria-label="Reset camera">
+          ↺
+        </button>
+        <label class="control" title="Sunset">
+          <span>☼</span>
+          <input id="timeOfDay" type="range" min="0" max="1" value="0.34" step="0.01" />
+        </label>
+        <label class="control" title="Wind">
+          <span>≈</span>
+          <input id="windPower" type="range" min="0" max="1" value="0.55" step="0.01" />
+        </label>
+      </div>
+      <div class="titlemark" aria-hidden="true">
+        <strong>Open Field</strong>
+        <span>painted realtime landscape</span>
+      </div>
+    </main>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.166.1/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.166.1/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
