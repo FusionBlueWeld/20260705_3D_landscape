@@ -11,21 +11,21 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.8));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.08;
+renderer.toneMappingExposure = 1.18;
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0xbdd7b0, 0.0066);
+scene.fog = new THREE.FogExp2(0xbdd7b0, 0.0049);
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 700);
-camera.position.set(11, 8.2, 21);
+const camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.1, 760);
+camera.position.set(1.5, 9.2, 33);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.055;
 controls.minDistance = 8;
-controls.maxDistance = 48;
+controls.maxDistance = 72;
 controls.maxPolarAngle = Math.PI * 0.47;
-controls.target.set(0, 2.2, -10);
+controls.target.set(5, 3.8, -60);
 
 const clock = new THREE.Clock();
 const world = new THREE.Group();
@@ -38,21 +38,16 @@ const uniforms = {
 };
 
 const palette = {
-  grassA: new THREE.Color("#8cc84a"),
-  grassB: new THREE.Color("#d7e566"),
-  grassShadow: new THREE.Color("#4d8b43"),
-  meadow: new THREE.Color("#9fcb5b"),
-  hill: new THREE.Color("#81b967"),
-  hillShadow: new THREE.Color("#557a59"),
-  rock: new THREE.Color("#8f8b72"),
-  lava: new THREE.Color("#ff8b20"),
-  malice: new THREE.Color("#ff3f9d"),
+  grassA: new THREE.Color("#78b844"),
+  grassB: new THREE.Color("#d6e971"),
+  grassShadow: new THREE.Color("#3f7c42"),
+  meadow: new THREE.Color("#aacb5f"),
+  hill: new THREE.Color("#83b764"),
+  hillShadow: new THREE.Color("#4e7358"),
+  rock: new THREE.Color("#8f8064"),
+  lava: new THREE.Color("#ff8a1c"),
+  malice: new THREE.Color("#ff42a4"),
 };
-
-function rampedLambert(color, shadow, light, strength = 1) {
-  const t = Math.floor(Math.max(0, light) * 4) / 3;
-  return shadow.clone().lerp(color, Math.min(1, t * strength));
-}
 
 function makeSky() {
   const geometry = new THREE.SphereGeometry(420, 48, 32);
@@ -107,13 +102,14 @@ function makeGround() {
   for (let i = 0; i < positions.count; i += 1) {
     const x = positions.getX(i);
     const z = positions.getZ(i);
-    const ridge = Math.sin(x * 0.05 + z * 0.035) * 2.1 + Math.sin(z * 0.085) * 1.3;
-    const bowl = -Math.exp(-((x + 28) ** 2 + (z + 10) ** 2) / 2600) * 7.5;
-    const foreground = Math.max(0, 1 - Math.abs(z - 18) / 70) * 2.2;
-    const y = ridge + bowl + foreground + Math.sin((x + z) * 0.022) * 1.5;
+    const y = terrainHeight(x, z);
     positions.setY(i, y);
-    const base = palette.hill.clone().lerp(palette.meadow, Math.random() * 0.38);
-    base.offsetHSL(0, Math.random() * 0.06, Math.random() * 0.08 - 0.02);
+    const distance = THREE.MathUtils.clamp((-z - 8) / 132, 0, 1);
+    const pathGlow = Math.exp(-((x - 12 - z * -0.18) ** 2) / 520) * THREE.MathUtils.clamp((z + 70) / 105, 0, 1);
+    const base = palette.hill.clone().lerp(palette.meadow, 0.48 + Math.sin(x * 0.035) * 0.08);
+    base.lerp(new THREE.Color("#d5df8a"), pathGlow * 0.18);
+    base.lerp(new THREE.Color("#7e9f75"), distance * 0.36);
+    base.offsetHSL(0, Math.random() * 0.045, Math.random() * 0.055 - 0.018);
     colors.push(base.r, base.g, base.b);
   }
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
@@ -143,17 +139,85 @@ function makeGradientTexture(colors) {
   return texture;
 }
 
+function makeSoftBlobTexture(color = "#fff1c8", alpha = 0.7) {
+  const canvas2d = document.createElement("canvas");
+  canvas2d.width = 256;
+  canvas2d.height = 96;
+  const ctx = canvas2d.getContext("2d");
+  ctx.clearRect(0, 0, canvas2d.width, canvas2d.height);
+  const gradient = ctx.createRadialGradient(116, 48, 4, 128, 48, 122);
+  gradient.addColorStop(0, color);
+  gradient.addColorStop(0.56, color);
+  gradient.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = gradient;
+  for (let i = 0; i < 7; i += 1) {
+    const x = 24 + i * 33 + Math.sin(i) * 9;
+    const y = 38 + Math.cos(i * 1.7) * 14;
+    ctx.beginPath();
+    ctx.ellipse(x, y, 36 + (i % 3) * 12, 13 + (i % 2) * 9, Math.sin(i) * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const texture = new THREE.CanvasTexture(canvas2d);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function makePaintedBands() {
+  const group = new THREE.Group();
+  const colors = ["#d7e56a", "#b9d65f", "#7eb455", "#eef0a0", "#6fa956"];
+  for (let i = 0; i < 46; i += 1) {
+    const x = -90 + Math.random() * 180;
+    const z = 18 - Math.random() * 112;
+    const width = 8 + Math.random() * 26;
+    const height = 1.2 + Math.random() * 3.8;
+    const material = new THREE.MeshBasicMaterial({
+      color: colors[i % colors.length],
+      transparent: true,
+      opacity: 0.13 + Math.random() * 0.17,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const band = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
+    band.position.set(x, terrainHeight(x, z) + 0.16, z);
+    band.rotation.set(-Math.PI / 2, 0, -0.18 + Math.random() * 0.36);
+    group.add(band);
+  }
+  world.add(group);
+}
+
+function makeWildflowers() {
+  const flowerMaterial = new THREE.MeshBasicMaterial({ color: "#ffd35c" });
+  const pinkMaterial = new THREE.MeshBasicMaterial({ color: "#f28aae" });
+  const geometry = new THREE.IcosahedronGeometry(0.08, 0);
+  const count = window.innerWidth < 680 ? 70 : 150;
+  const mesh = new THREE.InstancedMesh(geometry, flowerMaterial, count);
+  const pinkMesh = new THREE.InstancedMesh(geometry, pinkMaterial, Math.floor(count * 0.35));
+  const dummy = new THREE.Object3D();
+  for (let i = 0; i < count; i += 1) {
+    const x = -50 + Math.random() * 92;
+    const z = 22 - Math.random() * 72;
+    dummy.position.set(x, terrainHeight(x, z) + 0.7 + Math.random() * 0.45, z);
+    dummy.scale.setScalar(0.7 + Math.random() * 1.6);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(i, dummy.matrix);
+    if (i < pinkMesh.count) pinkMesh.setMatrixAt(i, dummy.matrix);
+  }
+  world.add(mesh, pinkMesh);
+}
+
 function terrainHeight(x, z) {
-  const ridge = Math.sin(x * 0.05 + z * 0.035) * 2.1 + Math.sin(z * 0.085) * 1.3;
-  const bowl = -Math.exp(-((x + 28) ** 2 + (z + 10) ** 2) / 2600) * 7.5;
-  const foreground = Math.max(0, 1 - Math.abs(z - 18) / 70) * 2.2;
-  return ridge + bowl + foreground + Math.sin((x + z) * 0.022) * 1.5;
+  const ridge = Math.sin(x * 0.04 + z * 0.027) * 2.4 + Math.sin(z * 0.074) * 1.55;
+  const valley = -Math.exp(-((x + 16) ** 2 + (z + 35) ** 2) / 3900) * 9.6;
+  const foreground = Math.max(0, 1 - Math.abs(z - 22) / 84) * 2.9;
+  const farLift = THREE.MathUtils.clamp((-z - 70) / 95, 0, 1) * 4.5;
+  return ridge + valley + foreground + farLift + Math.sin((x + z) * 0.019) * 1.25;
 }
 
 function makeGrass() {
   const blade = new THREE.PlaneGeometry(0.16, 1, 1, 4);
   blade.translate(0, 0.5, 0);
-  const count = window.innerWidth < 680 ? 6500 : 13000;
+  const count = window.innerWidth < 680 ? 7600 : 15000;
   const material = new THREE.ShaderMaterial({
     side: THREE.DoubleSide,
     uniforms,
@@ -197,7 +261,7 @@ function makeGrass() {
     const x = (Math.random() - 0.5) * (52 + near * 98);
     const z = 28 - near * 92 + (Math.random() - 0.5) * 14;
     const y = terrainHeight(x, z) + 0.06;
-    const scale = 0.75 + Math.random() * 1.6 + Math.max(0, z + 4) * 0.045;
+    const scale = 0.7 + Math.random() * 1.45 + Math.max(0, z + 4) * 0.055;
     dummy.position.set(x, y, z);
     dummy.rotation.set(0, Math.random() * Math.PI, (Math.random() - 0.5) * 0.28);
     dummy.scale.set(0.7 + Math.random() * 0.8, scale, 0.7 + Math.random() * 0.5);
@@ -215,18 +279,30 @@ function makeGrass() {
 
 function makeHills() {
   const group = new THREE.Group();
-  const gradient = makeGradientTexture(["#415b4d", "#668c5d", "#a2bd67", "#efd88d"]);
-  for (let i = 0; i < 16; i += 1) {
-    const geometry = new THREE.ConeGeometry(9 + Math.random() * 19, 7 + Math.random() * 18, 5 + (i % 3), 1);
-    const material = new THREE.MeshToonMaterial({
-      color: i % 4 === 0 ? "#8a8b6d" : "#86a867",
-      gradientMap: gradient,
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.set(-92 + i * 12 + Math.random() * 6, 2 + Math.random() * 3, -88 - Math.random() * 42);
-    mesh.rotation.set(0, Math.random() * Math.PI, 0);
-    mesh.scale.set(1.2, 0.65 + Math.random() * 0.5, 1.4);
-    group.add(mesh);
+  const gradient = makeGradientTexture(["#3e5a4c", "#6d9660", "#b8cb74", "#efd894"]);
+  const layers = [
+    { z: -78, y: 5, color: "#9fc46b", scale: 1.0, count: 12 },
+    { z: -112, y: 9, color: "#95ad72", scale: 1.35, count: 15 },
+    { z: -152, y: 14, color: "#8ea08a", scale: 1.7, count: 18 },
+  ];
+  for (const layer of layers) {
+    for (let i = 0; i < layer.count; i += 1) {
+      const geometry = new THREE.ConeGeometry(
+        (12 + Math.random() * 22) * layer.scale,
+        (9 + Math.random() * 25) * layer.scale,
+        5 + (i % 3),
+        1
+      );
+      const material = new THREE.MeshToonMaterial({
+        color: layer.color,
+        gradientMap: gradient,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(-125 + i * (250 / layer.count) + Math.random() * 8, layer.y, layer.z - Math.random() * 22);
+      mesh.rotation.set(0, Math.random() * Math.PI, 0);
+      mesh.scale.set(1.35, 0.55 + Math.random() * 0.52, 1.55);
+      group.add(mesh);
+    }
   }
   world.add(group);
 }
@@ -274,29 +350,29 @@ function makeVolcano() {
     color: "#6f6854",
     gradientMap: makeGradientTexture(["#34342d", "#70664e", "#c59d62"]),
   });
-  const cone = new THREE.Mesh(new THREE.ConeGeometry(18, 31, 7, 3), rockMat);
-  cone.position.set(56, 15, -112);
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(22, 48, 7, 3), rockMat);
+  cone.position.set(56, 23, -148);
   cone.rotation.y = 0.35;
-  cone.scale.set(1.25, 1, 1.05);
+  cone.scale.set(1.28, 1.06, 1.08);
   group.add(cone);
 
   const lavaMat = new THREE.MeshBasicMaterial({ color: palette.lava, transparent: true, opacity: 0.92 });
   for (let i = 0; i < 8; i += 1) {
-    const stream = new THREE.Mesh(new THREE.PlaneGeometry(1.1 + Math.random(), 12 + Math.random() * 14), lavaMat);
-    stream.position.set(52 + Math.random() * 11, 18 - Math.random() * 7, -100 + Math.random() * 4);
+    const stream = new THREE.Mesh(new THREE.PlaneGeometry(1.4 + Math.random() * 1.7, 18 + Math.random() * 19), lavaMat);
+    stream.position.set(50 + Math.random() * 14, 25 - Math.random() * 9, -132 + Math.random() * 6);
     stream.rotation.set(-0.6 + Math.random() * 0.35, 0.25, Math.random() * 0.55);
     group.add(stream);
   }
 
   const glow = new THREE.PointLight(palette.lava, 5.4, 90, 2.0);
-  glow.position.set(56, 31, -103);
+  glow.position.set(56, 49, -134);
   group.add(glow);
 
   const smokeMat = new THREE.MeshBasicMaterial({ color: "#3f443f", transparent: true, opacity: 0.34, depthWrite: false });
   for (let i = 0; i < 10; i += 1) {
-    const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(3.2 + i * 0.33, 1), smokeMat);
-    puff.position.set(50 + Math.sin(i) * 5, 34 + i * 1.3, -107 + Math.cos(i * 1.4) * 4);
-    puff.scale.set(1.8, 0.65, 1.1);
+    const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(4.2 + i * 0.48, 1), smokeMat);
+    puff.position.set(49 + Math.sin(i) * 8, 52 + i * 1.7, -138 + Math.cos(i * 1.4) * 6);
+    puff.scale.set(2.1, 0.72, 1.3);
     group.add(puff);
   }
   world.add(group);
@@ -306,17 +382,17 @@ function makeCastleSilhouette() {
   const group = new THREE.Group();
   const mat = new THREE.MeshToonMaterial({ color: "#313b36" });
   const glowMat = new THREE.MeshBasicMaterial({ color: palette.malice, transparent: true, opacity: 0.88 });
-  group.position.set(-63, 0, -86);
-  const base = new THREE.Mesh(new THREE.BoxGeometry(13, 8, 12), mat);
-  base.position.y = 6;
+  group.position.set(-54, 1.5, -108);
+  const base = new THREE.Mesh(new THREE.BoxGeometry(19, 11, 14), mat);
+  base.position.y = 8;
   group.add(base);
   for (let i = 0; i < 7; i += 1) {
-    const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.4, 9 + i * 1.3, 5), mat);
-    tower.position.set(-7 + i * 2.3, 9 + i * 0.3, -1 + Math.sin(i) * 4);
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.7, 12 + i * 1.6, 5), mat);
+    tower.position.set(-10 + i * 3.2, 12 + i * 0.45, -1 + Math.sin(i) * 5);
     group.add(tower);
-    const cap = new THREE.Mesh(new THREE.ConeGeometry(1.45, 5.5, 5), mat);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(1.9, 7.2, 5), mat);
     cap.position.copy(tower.position);
-    cap.position.y += 7;
+    cap.position.y += 9;
     group.add(cap);
   }
   for (let i = 0; i < 10; i += 1) {
@@ -326,7 +402,7 @@ function makeCastleSilhouette() {
     group.add(vein);
   }
   const light = new THREE.PointLight(palette.malice, 3.5, 55, 2);
-  light.position.set(0, 13, 0);
+  light.position.set(0, 17, 0);
   group.add(light);
   world.add(group);
 }
@@ -362,9 +438,15 @@ function makePathAndMist() {
   path.position.y = 0.15;
   world.add(path);
 
-  const mistMat = new THREE.MeshBasicMaterial({ color: "#fff5d6", transparent: true, opacity: 0.26, depthWrite: false });
+  const mistMat = new THREE.MeshBasicMaterial({
+    color: "#fff5d6",
+    map: makeSoftBlobTexture("#fff8dd", 0.78),
+    transparent: true,
+    opacity: 0.3,
+    depthWrite: false,
+  });
   for (let i = 0; i < 22; i += 1) {
-    const mist = new THREE.Mesh(new THREE.PlaneGeometry(15 + Math.random() * 24, 2.4 + Math.random() * 4), mistMat);
+    const mist = new THREE.Mesh(new THREE.PlaneGeometry(18 + Math.random() * 32, 5 + Math.random() * 7), mistMat);
     const x = -56 + Math.random() * 105;
     const z = -75 + Math.random() * 48;
     mist.position.set(x, terrainHeight(x, z) + 2.5 + Math.random() * 2, z);
@@ -401,11 +483,15 @@ function makeAnimals() {
 
 function makeClouds() {
   const group = new THREE.Group();
-  const mat = new THREE.MeshBasicMaterial({ color: "#fff0c8", transparent: true, opacity: 0.28, depthWrite: false });
-  for (let i = 0; i < 24; i += 1) {
-    const cloud = new THREE.Mesh(new THREE.PlaneGeometry(26 + Math.random() * 36, 4 + Math.random() * 8), mat);
-    cloud.position.set(-150 + Math.random() * 300, 35 + Math.random() * 44, -120 - Math.random() * 120);
-    cloud.rotation.set(-0.03, 0, -0.08 + Math.random() * 0.16);
+  const cloudTexture = makeSoftBlobTexture("#fff0c8", 0.62);
+  const mats = [
+    new THREE.MeshBasicMaterial({ color: "#fff0c8", map: cloudTexture, transparent: true, opacity: 0.28, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ color: "#dfe8bd", map: cloudTexture, transparent: true, opacity: 0.22, depthWrite: false }),
+  ];
+  for (let i = 0; i < 28; i += 1) {
+    const cloud = new THREE.Mesh(new THREE.PlaneGeometry(34 + Math.random() * 58, 10 + Math.random() * 16), mats[i % 2]);
+    cloud.position.set(-160 + Math.random() * 320, 36 + Math.random() * 48, -125 - Math.random() * 160);
+    cloud.rotation.set(-0.02, 0, -0.08 + Math.random() * 0.16);
     group.add(cloud);
   }
   world.add(group);
@@ -414,9 +500,11 @@ function makeClouds() {
 
 makeGround();
 makeHills();
+makePaintedBands();
 makeTrees();
 makeDistantLandmarks();
 makeGrass();
+makeWildflowers();
 const clouds = makeClouds();
 
 const hemi = new THREE.HemisphereLight("#fff3b8", "#5a704f", 2.1);
@@ -439,8 +527,8 @@ function updateAtmosphere(timeOfDay) {
 }
 
 document.querySelector("#resetView").addEventListener("click", () => {
-  camera.position.set(11, 8.2, 21);
-  controls.target.set(0, 2.2, -10);
+  camera.position.set(1.5, 9.2, 33);
+  controls.target.set(5, 3.8, -60);
   controls.update();
 });
 
